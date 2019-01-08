@@ -1,7 +1,12 @@
 // tslint:disable
 {{>licenseInfo}}
 
-export const BASE_PATH = "{{{basePath}}}".replace(/\/+$/, "");
+import { Observable } from 'rxjs';
+import { ajax } from 'rxjs/ajax';
+import { map } from 'rxjs/operators';
+import { environment as env } from '../environments';
+
+export const BASE_PATH = (env.api || '{{{basePath}}}').replace(/\/+$/, '');
 
 /**
  * This is the base class for all generated API classes.
@@ -30,53 +35,55 @@ export class BaseAPI {
         return this.withMiddleware<T>(...middlewares);
     }
 
-    protected async request(context: RequestOpts): Promise<Response> {
-        const { url, init } = this.createFetchParams(context);
-        const response = await this.fetchApi(url, init);
-        if (response.status >= 200 && response.status < 300) {
-            return response;
-        }
-        throw response;
+    protected request<T>(context: RequestOpts): Observable<T> {
+        return this.rxjsRequest(this.createRequestArgs(context)).pipe(
+            map((res) => {
+                if (res.status >= 200 && res.status < 300) {
+                    return res.response as T;
+                }
+                throw res;
+            })
+        );
     }
 
-    private createFetchParams(context: RequestOpts) {
+    private createRequestArgs(context: RequestOpts): RequestArgs {
         let url = this.configuration.basePath + context.path;
         if (context.query !== undefined && Object.keys(context.query).length !== 0) {
             // only add the querystring to the URL if there are query parameters.
-            // this is done to avoid urls ending with a "?" character which buggy webservers
+            // this is done to avoid urls ending with a '?' character which buggy webservers
             // do not handle correctly sometimes.
             url += '?' + querystring(context.query);
         }
         const body = context.body instanceof FormData ? context.body : JSON.stringify(context.body);
-        const init = {
+        const options = {
             method: context.method,
             headers: context.headers,
             body,
         };
-        return { url, init };
+        return { url, options };
     }
 
-    private fetchApi = async (url: string, init: RequestInit) => {
-        let fetchParams = { url, init };
+    private rxjsRequest(params: RequestArgs) {
         for (const middleware of this.middleware) {
             if (middleware.pre) {
-                fetchParams = await middleware.pre({
-                    fetch: this.fetchApi,
-                    ...fetchParams,
-                }) || fetchParams;
+                params = middleware.pre({
+                    ...params,
+                }) || params;
             }
         }
-        let response = await this.configuration.fetchApi(fetchParams.url, fetchParams.init);
+        
+        let response = ajax({ url: params.url, ...params.options });
+
         for (const middleware of this.middleware) {
             if (middleware.post) {
-                response = await middleware.post({
-                    fetch: this.fetchApi,
+                response = middleware.post({
                     url,
-                    init,
+                    options,
                     response: response.clone(),
                 }) || response;
             }
         }
+
         return response;
     }
 
@@ -93,25 +100,22 @@ export class BaseAPI {
 };
 
 export class RequiredError extends Error {
-    name: "RequiredError" = "RequiredError";
+    name: 'RequiredError' = 'RequiredError';
     constructor(public field: string, msg?: string) {
         super(msg);
     }
 }
 
 export const COLLECTION_FORMATS = {
-    csv: ",",
-    ssv: " ",
-    tsv: "\t",
-    pipes: "|",
+    csv: ',',
+    ssv: ' ',
+    tsv: '\t',
+    pipes: '|',
 };
-
-export type FetchAPI = GlobalFetch['fetch'];
 
 export interface ConfigurationParameters {
     basePath?: string; // override base path
-    fetchApi?: FetchAPI; // override for fetch implementation
-    middleware?: Middleware[]; // middleware to apply before/after fetch requests
+    middleware?: Middleware[]; // middleware to apply before/after rxjs requests
     username?: string; // parameter for basic security
     password?: string; // parameter for basic security
     apiKey?: string | ((name: string) => string); // parameter for apiKey security
@@ -123,10 +127,6 @@ export class Configuration {
 
     get basePath(): string {
         return this.configuration.basePath || BASE_PATH;
-    }
-
-    get fetchApi(): FetchAPI {
-        return this.configuration.fetchApi || window.fetch.bind(window);
     }
 
     get middleware(): Middleware[] {
@@ -159,31 +159,26 @@ export class Configuration {
 }
 
 export type Json = any;
-export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
-export type HTTPHeaders = { [key: string]: string };
-export type HTTPQuery = { [key: string]: string | number | null | boolean | Array<string | number | null | boolean> };
-export type HTTPBody = Json | FormData;
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
+export type HttpHeaders = { [key: string]: string };
+export type HttpQuery = { [key: string]: string | number | null | boolean | Array<string | number | null | boolean> };
+export type HttpBody = Json | FormData;
 export type ModelPropertyNaming = 'camelCase' | 'snake_case' | 'PascalCase' | 'original';
 
-export interface FetchParams {
+export interface RequestArgs {
     url: string;
-    init: RequestInit;
+    options: RequestInit;
 }
 
 export interface RequestOpts {
     path: string;
-    method: HTTPMethod;
-    headers: HTTPHeaders;
-    query?: HTTPQuery;
-    body?: HTTPBody;
+    method: HttpMethod;
+    headers: HttpHeaders;
+    query?: HttpQuery;
+    body?: HttpBody;
 }
 
-export function exists(json: any, key: string) {
-    const value = json[key];
-    return value !== null && value !== undefined;
-}
-
-export function querystring(params: HTTPQuery) {
+export function querystring(params: HttpQuery) {
     return Object.keys(params)
         .map((key) => {
             const value = params[key];
@@ -191,66 +186,18 @@ export function querystring(params: HTTPQuery) {
                 const multiValue = value.join(`&${encodeURIComponent(key)}=`);
                 return `${encodeURIComponent(key)}=${multiValue}`;
             }
-            return `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+            return `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
         })
         .join('&');
 }
 
-export interface RequestContext {
-    fetch: FetchAPI;
-    url: string;
-    init: RequestInit;
-}
+export interface RequestContext extends RequestArgs {}
 
-export interface ResponseContext {
-    fetch: FetchAPI;
-    url: string;
-    init: RequestInit;
+export interface ResponseContext extends RequestArgs {
     response: Response;
 }
 
 export interface Middleware {
-    pre?(context: RequestContext): Promise<FetchParams | void>;
-    post?(context: ResponseContext): Promise<Response | void>;
-}
-
-export interface ApiResponse<T> {
-    raw: Response;
-    value(): Promise<T>;
-}
-
-export interface ResponseTransformer<T> {
-    (json: any): T;
-}
-
-export class JSONApiResponse<T> {
-    constructor(public raw: Response, private transformer: ResponseTransformer<T> = (jsonValue: any) => jsonValue) {}
-
-    async value() {
-        return this.transformer(await this.raw.json());
-    }
-}
-
-export class VoidApiResponse {
-    constructor(public raw: Response) {}
-
-    async value() {
-        return undefined;
-    }
-}
-
-export class BlobApiResponse {
-    constructor(public raw: Response) {}
-
-    async value() {
-        return await this.raw.blob();
-    };
-}
-
-export class TextApiResponse {
-    constructor(public raw: Response) {}
-
-    async value() {
-        return await this.raw.text();
-    };
+    pre?(context: RequestContext): Observable<RequestArgs | void>;
+    post?(context: ResponseContext): Observable<Response | void>;
 }

@@ -1,13 +1,12 @@
 // tslint:disable
 {{>licenseInfo}}
 
-import * as runtime from '../runtime';
+import { Observable } from 'rxjs';
+import { BaseAPI, RequiredError, HttpHeaders, HttpQuery, COLLECTION_FORMATS } from '../runtime';
 {{#imports.0}}
 import {
     {{#imports}}
     {{className}},
-    {{className}}FromJSON,
-    {{className}}ToJSON,
     {{/imports}}
 } from '../models';
 {{/imports.0}}
@@ -28,7 +27,7 @@ export interface {{operationIdCamelCase}}Request {
 /**
  * {{#description}}{{{description}}}{{/description}}{{^description}}no description{{/description}}
  */
-export class {{classname}} extends runtime.BaseAPI {
+export class {{classname}} extends BaseAPI {
 
     {{#operation}}
     /**
@@ -39,16 +38,16 @@ export class {{classname}} extends runtime.BaseAPI {
      * {{&summary}}
      {{/summary}}
      */
-    async {{nickname}}Raw({{#allParams.0}}requestParameters: {{operationIdCamelCase}}Request{{/allParams.0}}): Promise<runtime.ApiResponse<{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}>> {
+    {{nickname}}Raw({{#allParams.0}}requestParameters: {{operationIdCamelCase}}Request{{/allParams.0}}): Observable<{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}> {
         {{#allParams}}
         {{#required}}
         if (requestParameters.{{paramName}} === null || requestParameters.{{paramName}} === undefined) {
-            throw new runtime.RequiredError('{{paramName}}','Required parameter requestParameters.{{paramName}} was null or undefined when calling {{nickname}}.');
+            throw new RequiredError('{{paramName}}','Required parameter requestParameters.{{paramName}} was null or undefined when calling {{nickname}}.');
         }
 
         {{/required}}
         {{/allParams}}
-        const queryParameters: runtime.HTTPQuery = {};
+        const queryParameters: HttpQuery = {};
 
         {{#queryParams}}
         {{#isListContainer}}
@@ -57,7 +56,7 @@ export class {{classname}} extends runtime.BaseAPI {
             queryParameters['{{baseName}}'] = requestParameters.{{paramName}};
             {{/isCollectionFormatMulti}}
             {{^isCollectionFormatMulti}}
-            queryParameters['{{baseName}}'] = requestParameters.{{paramName}}.join(runtime.COLLECTION_FORMATS["{{collectionFormat}}"]);
+            queryParameters['{{baseName}}'] = requestParameters.{{paramName}}.join(COLLECTION_FORMATS["{{collectionFormat}}"]);
             {{/isCollectionFormatMulti}}
         }
 
@@ -79,7 +78,7 @@ export class {{classname}} extends runtime.BaseAPI {
 
         {{/isListContainer}}
         {{/queryParams}}
-        const headerParameters: runtime.HTTPHeaders = {};
+        const headerParameters: HttpHeaders = {};
 
         {{#bodyParam}}
         {{^consumes}}
@@ -94,7 +93,7 @@ export class {{classname}} extends runtime.BaseAPI {
         {{#headerParams}}
         {{#isListContainer}}
         if (requestParameters.{{paramName}}) {
-            headerParameters['{{baseName}}'] = requestParameters.{{paramName}}.join(runtime.COLLECTION_FORMATS["{{collectionFormat}}"]));
+            headerParameters['{{baseName}}'] = requestParameters.{{paramName}}.join(COLLECTION_FORMATS["{{collectionFormat}}"]));
         }
 
         {{/isListContainer}}
@@ -162,7 +161,7 @@ export class {{classname}} extends runtime.BaseAPI {
 
         {{/isListContainer}}
         {{/formParams}}
-        const response = await this.request({
+        return this.request<{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}>({
             path: `{{{path}}}`{{#pathParams}}.replace(`{${"{{baseName}}"}}`, encodeURIComponent(String(requestParameters.{{paramName}}))){{/pathParams}},
             method: '{{httpMethod}}',
             headers: headerParameters,
@@ -170,11 +169,11 @@ export class {{classname}} extends runtime.BaseAPI {
             {{#hasBodyParam}}
             {{#bodyParam}}
             {{#isContainer}}
-            body: requestParameters.{{paramName}}.map({{#items}}{{datatype}}{{/items}}ToJSON),
+            body: requestParameters.{{paramName}},
             {{/isContainer}}
             {{^isContainer}}
             {{^isPrimitiveType}}
-            body: {{dataType}}ToJSON(requestParameters.{{paramName}}),
+            body: requestParameters.{{paramName}},
             {{/isPrimitiveType}}
             {{#isPrimitiveType}}
             body: requestParameters.{{paramName}} as any,
@@ -186,36 +185,6 @@ export class {{classname}} extends runtime.BaseAPI {
             body: formData,
             {{/hasFormParams}}
         });
-
-        {{#returnType}}
-        {{#isResponseFile}}
-        return new runtime.BlobApiResponse(response);
-        {{/isResponseFile}}
-        {{^isResponseFile}}
-        {{#returnTypeIsPrimitive}}
-        {{#isMapContainer}}
-        return new runtime.JSONApiResponse<any>(response);
-        {{/isMapContainer}}
-        {{#isListContainer}}
-        return new runtime.JSONApiResponse<any>(response);
-        {{/isListContainer}}
-        {{#returnSimpleType}}
-        return new runtime.TextApiResponse(response);
-        {{/returnSimpleType}}
-        {{/returnTypeIsPrimitive}}
-        {{^returnTypeIsPrimitive}}
-        {{#isListContainer}}
-        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map({{returnBaseType}}FromJSON));
-        {{/isListContainer}}
-        {{^isListContainer}}
-        return new runtime.JSONApiResponse(response, (jsonValue) => {{returnBaseType}}FromJSON(jsonValue));
-        {{/isListContainer}}
-        {{/returnTypeIsPrimitive}}
-        {{/isResponseFile}}
-        {{/returnType}}
-        {{^returnType}}
-        return new runtime.VoidApiResponse(response);
-        {{/returnType}}
     }
 
     /**
@@ -226,13 +195,12 @@ export class {{classname}} extends runtime.BaseAPI {
      * {{&summary}}
      {{/summary}}
      */
-    async {{nickname}}({{#allParams.0}}requestParameters: {{operationIdCamelCase}}Request{{/allParams.0}}): Promise<{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}> {
+    {{nickname}}({{#allParams.0}}requestParameters: {{operationIdCamelCase}}Request{{/allParams.0}}): Observable<{{#returnType}}{{{returnType}}}{{/returnType}}{{^returnType}}void{{/returnType}}> {
         {{#returnType}}
-        const response = await this.{{nickname}}Raw({{#allParams.0}}requestParameters{{/allParams.0}});
-        return await response.value();
+        return this.{{nickname}}Raw({{#allParams.0}}requestParameters{{/allParams.0}});
         {{/returnType}}
         {{^returnType}}
-        await this.{{nickname}}Raw({{#allParams.0}}requestParameters{{/allParams.0}});
+        this.{{nickname}}Raw({{#allParams.0}}requestParameters{{/allParams.0}});
         {{/returnType}}
     }
 
