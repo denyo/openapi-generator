@@ -1,18 +1,16 @@
 // tslint:disable
 {{>licenseInfo}}
-
-import { Observable } from 'rxjs';
-import { ajax } from 'rxjs/ajax';
-import { map } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { ajax, AjaxResponse } from 'rxjs/ajax';
+import { map, concatMap } from 'rxjs/operators';
 import { environment as env } from '../environments';
 
-export const BASE_PATH = (env.api || '{{{basePath}}}').replace(/\/+$/, '');
+export const BASE_PATH = (env.api || '{{{basePath}}}').replace(/\/+$/, '');
 
 /**
  * This is the base class for all generated API classes.
  */
 export class BaseAPI {
-
     private middleware: Middleware[];
 
     constructor(protected configuration = new Configuration()) {
@@ -63,28 +61,28 @@ export class BaseAPI {
         return { url, options };
     }
 
-    private rxjsRequest(params: RequestArgs) {
-        for (const middleware of this.middleware) {
-            if (middleware.pre) {
-                params = middleware.pre({
-                    ...params,
-                }) || params;
-            }
-        }
-        
-        let response = ajax({ url: params.url, ...params.options });
+    private rxjsRequest(params: RequestContext): Observable<AjaxResponse> {
+        const preMiddlewares = this.middleware && this.middleware.filter((item) => item.pre);
+        const postMiddlewares = this.middleware && this.middleware.filter((item) => item.post);
 
-        for (const middleware of this.middleware) {
-            if (middleware.post) {
-                response = middleware.post({
-                    url,
-                    options,
-                    response: response.clone(),
-                }) || response;
-            }
-        }
-
-        return response;
+        return of(params).pipe(
+            map((args) => {
+                if (preMiddlewares) {
+                    preMiddlewares.forEach((mw) => (args = mw.pre({ ...args })));
+                }
+                return args;
+            }),
+            concatMap((args) =>
+                ajax({ url: args.url, ...args.options }).pipe(
+                    map((response) => {
+                        if (postMiddlewares) {
+                            postMiddlewares.forEach((mw) => (response = mw.post({ ...params, response: response })));
+                        }
+                        return response;
+                    })
+                )
+            )
+        );
     }
 
     /**
@@ -97,7 +95,7 @@ export class BaseAPI {
         next.middleware = this.middleware.slice();
         return next;
     }
-};
+}
 
 export class RequiredError extends Error {
     name: 'RequiredError' = 'RequiredError';
@@ -192,12 +190,11 @@ export function querystring(params: HttpQuery) {
 }
 
 export interface RequestContext extends RequestArgs {}
-
 export interface ResponseContext extends RequestArgs {
-    response: Response;
+    response: AjaxResponse;
 }
 
 export interface Middleware {
-    pre?(context: RequestContext): Observable<RequestArgs | void>;
-    post?(context: ResponseContext): Observable<Response | void>;
+    pre?(context: RequestContext): RequestArgs;
+    post?(context: ResponseContext): AjaxResponse;
 }
