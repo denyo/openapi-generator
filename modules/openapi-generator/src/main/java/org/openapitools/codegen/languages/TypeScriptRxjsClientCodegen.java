@@ -79,7 +79,7 @@ public class TypeScriptRxjsClientCodegen extends AbstractTypeScriptClientCodegen
 
     @Override
     public String getHelp() {
-        return "Generates a TypeScript client library using Rxjs API (beta).";
+        return "Generates a TypeScript client library using Rxjs API.";
     }
 
     public String getNpmName() {
@@ -146,6 +146,12 @@ public class TypeScriptRxjsClientCodegen extends AbstractTypeScriptClientCodegen
     protected void addAdditionPropertiesToCodeGenModel(CodegenModel codegenModel, Schema schema) {
         codegenModel.additionalPropertiesType = getTypeDeclaration(ModelUtils.getAdditionalProperties(schema));
         addImport(codegenModel, codegenModel.additionalPropertiesType);
+    }
+
+    @Override
+    public Map<String, Object> postProcessModels(Map<String, Object> objs) {
+        // don't do enum modifications
+        return objs;
     }
 
     @Override
@@ -226,25 +232,19 @@ public class TypeScriptRxjsClientCodegen extends AbstractTypeScriptClientCodegen
         this.reservedWords.add("BaseAPI");
         this.reservedWords.add("RequiredError");
         this.reservedWords.add("COLLECTION_FORMATS");
-        // this.reservedWords.add("FetchAPI");
         this.reservedWords.add("ConfigurationParameters");
         this.reservedWords.add("Configuration");
-        this.reservedWords.add("HTTPMethod");
-        this.reservedWords.add("HTTPHeaders");
-        this.reservedWords.add("HTTPQuery");
-        this.reservedWords.add("HTTPBody");
+        this.reservedWords.add("HttpMethod");
+        this.reservedWords.add("HttpHeaders");
+        this.reservedWords.add("HttpQuery");
+        this.reservedWords.add("HttpBody");
         this.reservedWords.add("ModelPropertyNaming");
-        this.reservedWords.add("FetchParams");
+        this.reservedWords.add("RequestArgs");
         this.reservedWords.add("RequestOpts");
         this.reservedWords.add("exists");
         this.reservedWords.add("RequestContext");
         this.reservedWords.add("ResponseContext");
         this.reservedWords.add("Middleware");
-        this.reservedWords.add("ApiResponse");
-        this.reservedWords.add("ResponseTransformer");
-        this.reservedWords.add("JSONApiResponse");
-        this.reservedWords.add("VoidApiResponse");
-        this.reservedWords.add("BlobApiResponse");
-        this.reservedWords.add("TextApiResponse");
+        this.reservedWords.add("AjaxResponse");
     }
 }
